@@ -88,6 +88,7 @@ function showMainMenu() {
   6. Message Scheduler
   7. Backup/Restore
   8. Settings
+  9. View status
   0. Exit
   `));
   rl.question(colors.blue('Select option: '), handleMenuChoice);
@@ -103,6 +104,7 @@ async function handleMenuChoice(choice) {
     case '6': await commands.schedule(client, rl); break;
     case '7': await commands.backup(client, rl); break;
     case '8': await commands.settings(client, rl); break;
+    case '9': await commands.status(client, rl); break;
     case '0': exitApp(); break;
     default: console.log(colors.red('Invalid choice'));
   }
