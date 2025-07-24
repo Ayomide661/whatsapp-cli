@@ -22,7 +22,23 @@ const rl = readline.createInterface({
   prompt: colors.prompt
 });
 
-rl.questionAsync = (question) => new Promise(resolve => rl.question(question, resolve));
+// Add promise-based question function to readline
+rl.questionAsync = (question) => {
+  return new Promise((resolve) => {
+    rl.question(question, resolve);
+  });
+};
+
+// Add this helper function right after rl initialization
+function formatContactList(contacts) {
+  return contacts.map(chat => {
+    return {
+      name: chat.name || chat.id.user,
+      id: chat.id._serialized,
+      isGroup: chat.isGroup
+    };
+  });
+}
 
 // Load commands
 const commands = {
