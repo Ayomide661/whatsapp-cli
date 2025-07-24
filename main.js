@@ -1,9 +1,22 @@
 #!/usr/bin/env node
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client } = require('whatsapp-web.js');
 const readline = require('readline');
 const colors = require('./lib/colors');
-const config = require('./lib/config');
-require('./utils/inputHelper')(rl);
+const path = require('path');
+
+// Initialize readline
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  prompt: colors.prompt
+});
+
+// Add promise-based question function
+rl.questionAsync = (question) => {
+  return new Promise((resolve) => {
+    rl.question(question, resolve);
+  });
+};
 
 // Load all commands
 const commands = {
@@ -17,14 +30,15 @@ const commands = {
   settings: require('./commands/settings')
 };
 
-const client = new Client(config.clientOptions);
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  prompt: colors.prompt
+const client = new Client({
+  authStrategy: new LocalAuth({ clientId: "cli-client" }),
+  puppeteer: { 
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  }
 });
 
-// Initialize client events
+// Client Events
 client.on('qr', qr => {
   console.log(colors.yellow('\nScan QR Code:'));
   require('qrcode-terminal').generate(qr, { small: true });
@@ -35,6 +49,7 @@ client.on('ready', () => {
   showMainMenu();
 });
 
+// Menu System
 function showMainMenu() {
   console.log(colors.cyan(`
   ===== ${colors.bold('WhatsApp CLI')} =====
