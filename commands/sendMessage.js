@@ -1,4 +1,3 @@
-const { proto } = require('@adiwajshing/baileys');
 const colors = require('../lib/colors');
 
 module.exports = async (sock, rl) => {
