@@ -1,12 +1,13 @@
+const { proto } = require('@adiwajshing/baileys');
 const colors = require('../lib/colors');
 
-module.exports = async (conn, rl) => {
+module.exports = async (sock, rl) => {
     try {
         const jid = await rl.questionAsync(colors.blue('Recipient (number): '));
         const message = await rl.questionAsync(colors.blue('Message: '));
         
         const formattedJid = jid.includes('@') ? jid : `${jid}@s.whatsapp.net`;
-        await conn.sendMessage(formattedJid, message, MessageType.text);
+        await sock.sendMessage(formattedJid, { text: message });
         
         console.log(colors.green('✓ Message sent'));
     } catch (error) {
