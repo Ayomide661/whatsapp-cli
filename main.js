@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { WAConnection, MessageType, Presence } = require('@adiwajshing/baileys');
+const { useMultiFileAuthState, makeWASocket, DisconnectReason } = require('@adiwajshing/baileys');
 const qrcode = require('qrcode-terminal');
 const readline = require('readline');
 const path = require('path');
@@ -14,17 +14,6 @@ const colors = {
     prompt: '\x1b[34m>\x1b[0m '
 };
 
-// Initialize Baileys
-const conn = new WAConnection();
-
-// Session configuration
-conn.version = [3, 3234, 9]; // WhatsApp version
-conn.autoReconnect = true;
-conn.connectOptions = {
-    maxRetries: 5,
-    delayReconnectMs: 1000
-};
-
 // Readline interface
 const rl = readline.createInterface({
     input: process.stdin,
@@ -32,34 +21,44 @@ const rl = readline.createInterface({
     prompt: colors.prompt
 });
 
-// Load commands
-const commands = {
-    send: require('./commands/sendMessage'),
-    chat: require('./commands/chatHistory'),
-    contacts: require('./commands/contacts'),
-    groups: require('./commands/groups'),
-    media: require('./commands/media'),
-    status: require('./commands/status'),
-    backup: require('./commands/backup')
-};
+// Main connection function
+async function connectToWhatsApp() {
+    const { state, saveCreds } = await useMultiFileAuthState('baileys_auth');
 
-// Event handlers
-conn.on('qr', qr => {
-    console.log(colors.yellow('\nScan QR Code:'));
-    qrcode.generate(qr, { small: true });
-});
+    const sock = makeWASocket({
+        printQRInTerminal: false,
+        auth: state
+    });
 
-conn.on('open', () => {
-    console.log(colors.green('\n✓ Connected to WhatsApp'));
-    showMainMenu();
-});
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect, qr } = update;
+        
+        if (qr) {
+            console.log(colors.yellow('\nScan QR Code:'));
+            qrcode.generate(qr, { small: true });
+        }
 
-conn.on('close', () => {
-    console.log(colors.yellow('\nConnection closed'));
-});
+        if (connection === 'open') {
+            console.log(colors.green('\n✓ Connected to WhatsApp'));
+            showMainMenu(sock);
+        }
+
+        if (connection === 'close') {
+            const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
+            console.log(colors.yellow(`\nConnection closed. ${shouldReconnect ? 'Reconnecting...' : 'Please restart the app.'}`));
+            if (shouldReconnect) {
+                connectToWhatsApp();
+            }
+        }
+    });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    return sock;
+}
 
 // Menu system
-function showMainMenu() {
+function showMainMenu(sock) {
     console.log(colors.cyan(`
     ===== WhatsApp CLI (Baileys) =====
     1. Send Message
@@ -71,33 +70,43 @@ function showMainMenu() {
     7. Backup Chats
     0. Exit
     `));
-    rl.question(colors.blue('Select option: '), handleMenuChoice);
+    rl.question(colors.blue('Select option: '), (choice) => handleMenuChoice(choice, sock));
 }
 
-async function handleMenuChoice(choice) {
-    switch(choice.trim()) {
-        case '1': await commands.send(conn, rl); break;
-        case '2': await commands.chat(conn, rl); break;
-        case '3': await commands.contacts(conn, rl); break;
-        case '4': await commands.groups(conn, rl); break;
-        case '5': await commands.media(conn, rl); break;
-        case '6': await commands.status(conn, rl); break;
-        case '7': await commands.backup(conn, rl); break;
-        case '0': 
-            await conn.close();
-            process.exit(0);
-        default:
-            console.log(colors.red('Invalid choice'));
+async function handleMenuChoice(choice, sock) {
+    const commands = {
+        '1': require('./commands/sendMessage'),
+        '2': require('./commands/chatHistory'),
+        '3': require('./commands/contacts'),
+        '4': require('./commands/groups'),
+        '5': require('./commands/media'),
+        '6': require('./commands/status'),
+        '7': require('./commands/backup')
+    };
+
+    if (commands[choice.trim()]) {
+        try {
+            await commands[choice.trim()](sock, rl);
+        } catch (error) {
+            console.log(colors.red(`✗ Error: ${error.message}`));
+        }
+    } else if (choice.trim() === '0') {
+        console.log(colors.yellow('\nExiting...'));
+        process.exit(0);
+    } else {
+        console.log(colors.red('Invalid choice'));
     }
-    showMainMenu();
+
+    showMainMenu(sock);
 }
 
-// Start connection
+// Start the application
 (async () => {
     try {
-        await conn.connect();
+        console.log(colors.cyan('Starting WhatsApp CLI...'));
+        await connectToWhatsApp();
     } catch (error) {
-        console.log(colors.red(`Connection error: ${error.message}`));
+        console.log(colors.red(`Fatal error: ${error.message}`));
         process.exit(1);
     }
 })();
