@@ -1,37 +1,35 @@
 const colors = require('../lib/colors');
-const fs = require('fs');
-const path = require('path');
+const sessionManager = require('../lib/sessionManager');
+const { WAConnection } = require('@adiwajshing/baileys');
 
 module.exports = async (client, rl) => {
-  try {
-    console.log(colors.cyan('\n⚠️ Status viewing requires direct WhatsApp connection'));
-    console.log(colors.yellow('This feature is not available via WhatsApp Web API'));
-    console.log(colors.cyan('\nWorkaround Options:'));
-    console.log('1. Use WhatsApp mobile app for status viewing');
-    console.log('2. Implement screenshot automation (requires additional setup)');
-    
-    // Alternative approach to get basic status info
     try {
-      const chats = await client.getChats();
-      const statusUpdates = chats.filter(chat => chat.isGroup === false)
-                                .map(chat => ({
-                                  name: chat.name,
-                                  lastSeen: chat.timestamp ? new Date(chat.timestamp * 1000) : null,
-                                  status: chat.contact ? chat.contact.status : null
-                                }));
-      
-      console.log(colors.cyan('\nLast Seen & Status Info:'));
-      statusUpdates.forEach(contact => {
-        if (contact.status || contact.lastSeen) {
-          console.log(`${colors.green(contact.name || 'Unknown')}:`);
-          if (contact.status) console.log(`   Status: ${contact.status}`);
-          if (contact.lastSeen) console.log(`   Last Seen: ${contact.lastSeen.toLocaleString()}`);
+        console.log(colors.cyan('\nInitializing status viewer...'));
+        
+        // Initialize Baileys with shared session
+        const baileysConn = await sessionManager.getBaileysConnection();
+        await sessionManager.connectBoth(client, baileysConn);
+
+        // Get status updates
+        console.log(colors.cyan('\nFetching status updates...'));
+        const statusUpdates = await baileysConn.getStatusUpdates();
+        
+        if (!statusUpdates || statusUpdates.length === 0) {
+            console.log(colors.yellow('No status updates found'));
+            return;
         }
-      });
+
+        // Display statuses
+        console.log(colors.cyan('\nRecent Status Updates:'));
+        statusUpdates.slice(0, 20).forEach((status, index) => {
+            console.log(`${colors.green(index + 1)}. ${status.name || 'Unknown'}`);
+            console.log(`   ${status.status || 'No text status'}`);
+            console.log(`   Last updated: ${new Date(status.timestamp * 1000).toLocaleString()}`);
+        });
+
+        // Clean up
+        await baileysConn.close();
     } catch (error) {
-      console.log(colors.yellow('\nCould not fetch contact status info'));
+        console.log(colors.red(`Error: ${error.message}`));
     }
-  } catch (error) {
-    console.log(colors.red(`Error: ${error.message}`));
-  }
 };
