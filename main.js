@@ -49,7 +49,8 @@ const commands = {
   media: require('./commands/media'),
   schedule: require('./commands/scheduler'),
   backup: require('./commands/backup'),
-  settings: require('./commands/settings')
+  settings: require('./commands/settings'),
+  status: require('./commands/status')
 };
 
 // Initialize client with proper LocalAuth
