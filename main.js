@@ -1,126 +1,103 @@
 #!/usr/bin/env node
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { WAConnection, MessageType, Presence } = require('@adiwajshing/baileys');
 const qrcode = require('qrcode-terminal');
 const readline = require('readline');
 const path = require('path');
-const sessionManager = require('./lib/sessionManager');
+const fs = require('fs');
 
-// Color functions (fallback if chalk not available)
+// Color setup
 const colors = {
-  blue: text => `\x1b[34m${text}\x1b[0m`,
-  green: text => `\x1b[32m${text}\x1b[0m`,
-  red: text => `\x1b[31m${text}\x1b[0m`,
-  yellow: text => `\x1b[33m${text}\x1b[0m`,
-  cyan: text => `\x1b[36m${text}\x1b[0m`,
-  bold: text => `\x1b[1m${text}\x1b[0m`,
-  prompt: '\x1b[34m\x1b[1mWhatsApp> \x1b[0m'
+    green: text => `\x1b[32m${text}\x1b[0m`,
+    red: text => `\x1b[31m${text}\x1b[0m`,
+    yellow: text => `\x1b[33m${text}\x1b[0m`,
+    cyan: text => `\x1b[36m${text}\x1b[0m`,
+    prompt: '\x1b[34m>\x1b[0m '
 };
 
-// Initialize readline with promise support
+// Initialize Baileys
+const conn = new WAConnection();
+
+// Session configuration
+conn.version = [3, 3234, 9]; // WhatsApp version
+conn.autoReconnect = true;
+conn.connectOptions = {
+    maxRetries: 5,
+    delayReconnectMs: 1000
+};
+
+// Readline interface
 const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  prompt: colors.prompt
+    input: process.stdin,
+    output: process.stdout,
+    prompt: colors.prompt
 });
-
-// Add promise-based question function to readline
-rl.questionAsync = (question) => {
-  return new Promise((resolve) => {
-    rl.question(question, resolve);
-  });
-};
-
-// Add this helper function right after rl initialization
-function formatContactList(contacts) {
-  return contacts.map(chat => {
-    return {
-      name: chat.name || chat.id.user,
-      id: chat.id._serialized,
-      isGroup: chat.isGroup
-    };
-  });
-}
 
 // Load commands
 const commands = {
-  send: require('./commands/sendMessage'),
-  history: require('./commands/chatHistory'),
-  contacts: require('./commands/contacts'),
-  groups: require('./commands/groups'),
-  media: require('./commands/media'),
-  schedule: require('./commands/scheduler'),
-  backup: require('./commands/backup'),
-  settings: require('./commands/settings'),
-  status: require('./commands/status')
+    send: require('./commands/sendMessage'),
+    chat: require('./commands/chatHistory'),
+    contacts: require('./commands/contacts'),
+    groups: require('./commands/groups'),
+    media: require('./commands/media'),
+    status: require('./commands/status'),
+    backup: require('./commands/backup')
 };
 
-// Initialize client with proper LocalAuth
-const client = new Client({
-    authStrategy: new LocalAuth({ 
-        clientId: "shared-session-client",
-        dataPath: path.join(__dirname, '.wwebjs_auth')
-    }),
-    puppeteer: { 
-        headless: true,
-        args: ['--no-sandbox']
-    }
+// Event handlers
+conn.on('qr', qr => {
+    console.log(colors.yellow('\nScan QR Code:'));
+    qrcode.generate(qr, { small: true });
 });
 
-// Client Events
-client.on('qr', qr => {
-  console.log(colors.yellow('\nScan QR Code:'));
-  qrcode.generate(qr, { small: true });
+conn.on('open', () => {
+    console.log(colors.green('\n✓ Connected to WhatsApp'));
+    showMainMenu();
 });
 
-client.on('authenticated', async (session) => {
-    await sessionManager.getWWebJSSession(client);
+conn.on('close', () => {
+    console.log(colors.yellow('\nConnection closed'));
 });
 
-client.on('ready', () => {
-  console.log(colors.green('\n✓ Client Ready'));
-  showMainMenu();
-});
-
-// Menu System
+// Menu system
 function showMainMenu() {
-  console.log(colors.cyan(`
-  ===== ${colors.bold('WhatsApp CLI')} =====
-  1. Send Message
-  2. Chat History
-  3. Manage Contacts
-  4. Group Tools
-  5. Media Downloader
-  6. Message Scheduler
-  7. Backup/Restore
-  8. Settings
-  9. View status
-  0. Exit
-  `));
-  rl.question(colors.blue('Select option: '), handleMenuChoice);
+    console.log(colors.cyan(`
+    ===== WhatsApp CLI (Baileys) =====
+    1. Send Message
+    2. Chat History
+    3. Contacts
+    4. Groups
+    5. Media Tools
+    6. Status Updates
+    7. Backup Chats
+    0. Exit
+    `));
+    rl.question(colors.blue('Select option: '), handleMenuChoice);
 }
 
 async function handleMenuChoice(choice) {
-  switch(choice.trim()) {
-    case '1': await commands.send(client, rl); break;
-    case '2': await commands.history(client, rl); break;
-    case '3': await commands.contacts(client, rl); break;
-    case '4': await commands.groups(client, rl); break;
-    case '5': await commands.media(client, rl); break;
-    case '6': await commands.schedule(client, rl); break;
-    case '7': await commands.backup(client, rl); break;
-    case '8': await commands.settings(client, rl); break;
-    case '9': await commands.status(client, rl); break;
-    case '0': exitApp(); break;
-    default: console.log(colors.red('Invalid choice'));
-  }
-  showMainMenu();
+    switch(choice.trim()) {
+        case '1': await commands.send(conn, rl); break;
+        case '2': await commands.chat(conn, rl); break;
+        case '3': await commands.contacts(conn, rl); break;
+        case '4': await commands.groups(conn, rl); break;
+        case '5': await commands.media(conn, rl); break;
+        case '6': await commands.status(conn, rl); break;
+        case '7': await commands.backup(conn, rl); break;
+        case '0': 
+            await conn.close();
+            process.exit(0);
+        default:
+            console.log(colors.red('Invalid choice'));
+    }
+    showMainMenu();
 }
 
-function exitApp() {
-  console.log(colors.yellow('\nClosing WhatsApp CLI...'));
-  client.destroy();
-  process.exit(0);
-}
-
-// Start
-client.initialize();
+// Start connection
+(async () => {
+    try {
+        await conn.connect();
+    } catch (error) {
+        console.log(colors.red(`Connection error: ${error.message}`));
+        process.exit(1);
+    }
+})();
