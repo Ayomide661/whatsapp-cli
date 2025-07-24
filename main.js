@@ -3,7 +3,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const readline = require('readline');
 const colors = require('./lib/colors');
 const config = require('./lib/config');
-require('../utils/inputHelper')(rl);
+require('./utils/inputHelper')(rl);
 
 // Load all commands
 const commands = {
