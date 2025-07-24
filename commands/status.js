@@ -4,41 +4,32 @@ const path = require('path');
 
 module.exports = async (client, rl) => {
   try {
-    console.log(colors.cyan('\nFetching status updates...'));
+    console.log(colors.cyan('\n⚠️ Status viewing requires direct WhatsApp connection'));
+    console.log(colors.yellow('This feature is not available via WhatsApp Web API'));
+    console.log(colors.cyan('\nWorkaround Options:'));
+    console.log('1. Use WhatsApp mobile app for status viewing');
+    console.log('2. Implement screenshot automation (requires additional setup)');
     
-    // Get status updates
-    const statusUpdates = await client.getStatus();
-    
-    if (!statusUpdates || statusUpdates.length === 0) {
-      console.log(colors.yellow('No status updates found'));
-      return;
-    }
-
-    console.log(colors.cyan('\nAvailable Status Updates:'));
-    statusUpdates.forEach((status, index) => {
-      console.log(`${colors.green(index + 1)}. ${status.author || 'Unknown'} - ${status.type}`);
-      console.log(`   ${status.body || 'No text'} [${new Date(status.timestamp * 1000).toLocaleString()}]`);
-    });
-
-    const choice = await rl.questionAsync(colors.blue('\nSelect status to view (number) or 0 to go back: '));
-    const selectedIndex = parseInt(choice) - 1;
-
-    if (selectedIndex >= 0 && selectedIndex < statusUpdates.length) {
-      const status = statusUpdates[selectedIndex];
+    // Alternative approach to get basic status info
+    try {
+      const chats = await client.getChats();
+      const statusUpdates = chats.filter(chat => chat.isGroup === false)
+                                .map(chat => ({
+                                  name: chat.name,
+                                  lastSeen: chat.timestamp ? new Date(chat.timestamp * 1000) : null,
+                                  status: chat.contact ? chat.contact.status : null
+                                }));
       
-      if (status.type === 'image' || status.type === 'video') {
-        console.log(colors.yellow('\nDownloading media...'));
-        const media = await client.downloadMedia(status);
-        
-        if (media) {
-          const ext = status.type === 'image' ? 'jpg' : 'mp4';
-          const filename = `status_${Date.now()}.${ext}`;
-          fs.writeFileSync(filename, media.data, 'base64');
-          console.log(colors.green(`✓ Saved as ${filename}`));
-        } else {
-          console.log(colors.red('Failed to download media'));
+      console.log(colors.cyan('\nLast Seen & Status Info:'));
+      statusUpdates.forEach(contact => {
+        if (contact.status || contact.lastSeen) {
+          console.log(`${colors.green(contact.name || 'Unknown')}:`);
+          if (contact.status) console.log(`   Status: ${contact.status}`);
+          if (contact.lastSeen) console.log(`   Last Seen: ${contact.lastSeen.toLocaleString()}`);
         }
-      }
+      });
+    } catch (error) {
+      console.log(colors.yellow('\nCould not fetch contact status info'));
     }
   } catch (error) {
     console.log(colors.red(`Error: ${error.message}`));
