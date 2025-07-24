@@ -1,24 +1,30 @@
 #!/usr/bin/env node
-const { Client } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
 const readline = require('readline');
-const colors = require('./lib/colors');
 const path = require('path');
 
-// Initialize readline
+// Color functions (fallback if chalk not available)
+const colors = {
+  blue: text => `\x1b[34m${text}\x1b[0m`,
+  green: text => `\x1b[32m${text}\x1b[0m`,
+  red: text => `\x1b[31m${text}\x1b[0m`,
+  yellow: text => `\x1b[33m${text}\x1b[0m`,
+  cyan: text => `\x1b[36m${text}\x1b[0m`,
+  bold: text => `\x1b[1m${text}\x1b[0m`,
+  prompt: '\x1b[34m\x1b[1mWhatsApp> \x1b[0m'
+};
+
+// Initialize readline with promise support
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
   prompt: colors.prompt
 });
 
-// Add promise-based question function
-rl.questionAsync = (question) => {
-  return new Promise((resolve) => {
-    rl.question(question, resolve);
-  });
-};
+rl.questionAsync = (question) => new Promise(resolve => rl.question(question, resolve));
 
-// Load all commands
+// Load commands
 const commands = {
   send: require('./commands/sendMessage'),
   history: require('./commands/chatHistory'),
@@ -30,6 +36,7 @@ const commands = {
   settings: require('./commands/settings')
 };
 
+// Initialize client with proper LocalAuth
 const client = new Client({
   authStrategy: new LocalAuth({ clientId: "cli-client" }),
   puppeteer: { 
@@ -41,7 +48,11 @@ const client = new Client({
 // Client Events
 client.on('qr', qr => {
   console.log(colors.yellow('\nScan QR Code:'));
-  require('qrcode-terminal').generate(qr, { small: true });
+  qrcode.generate(qr, { small: true });
+});
+
+client.on('authenticated', () => {
+  console.log(colors.green('\n✓ Authenticated'));
 });
 
 client.on('ready', () => {
@@ -76,10 +87,17 @@ async function handleMenuChoice(choice) {
     case '6': await commands.schedule(client, rl); break;
     case '7': await commands.backup(client, rl); break;
     case '8': await commands.settings(client, rl); break;
-    case '0': process.exit(0);
+    case '0': exitApp(); break;
     default: console.log(colors.red('Invalid choice'));
   }
   showMainMenu();
 }
 
+function exitApp() {
+  console.log(colors.yellow('\nClosing WhatsApp CLI...'));
+  client.destroy();
+  process.exit(0);
+}
+
+// Start
 client.initialize();
