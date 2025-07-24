@@ -1,6 +1,7 @@
 const fs = require('fs');
 const colors = require('../lib/colors');
 const { findContact } = require('../utils/contactFinder');
+const { MessageMedia } = require('whatsapp-web.js');
 
 module.exports = async (client, rl) => {
   try {
@@ -12,37 +13,52 @@ module.exports = async (client, rl) => {
     
     switch(choice) {
       case '1':
-        const chatId = await rl.questionAsync(colors.blue('Chat ID: '));
-        const limit = await rl.questionAsync(colors.blue('Last N messages (10): ')) || 10;
-        
-        const chat = await client.getChatById(chatId);
-        const messages = await chat.fetchMessages({ limit: parseInt(limit) });
-        
-        let mediaCount = 0;
-        for (const msg of messages) {
-          if (msg.hasMedia) {
-            const media = await msg.downloadMedia();
-            const ext = media.mimetype.split('/')[1];
-            fs.writeFileSync(`media_${Date.now()}.${ext}`, media.data, 'base64');
-            mediaCount++;
+        try {
+          const query = await rl.questionAsync(colors.blue('Contact/Group name: '));
+          const limit = await rl.questionAsync(colors.blue('Last N messages (10): ')) || 10;
+          
+          const chat = await findContact(client, query);
+          const messages = await chat.fetchMessages({ limit: parseInt(limit) });
+          
+          let downloaded = 0;
+          for (const msg of messages) {
+            if (msg.hasMedia) {
+              try {
+                const media = await msg.downloadMedia();
+                const ext = media.mimetype.split('/')[1] || 'bin';
+                const filename = `media_${Date.now()}_${downloaded}.${ext}`;
+                fs.writeFileSync(filename, media.data, 'base64');
+                console.log(colors.green(`✓ Saved ${filename}`));
+                downloaded++;
+              } catch (e) {
+                console.log(colors.yellow(`⚠ Couldn't download media from message ${msg.id}`));
+              }
+            }
           }
+          console.log(colors.cyan(`\nDownloaded ${downloaded} media files`));
+        } catch (e) {
+          console.log(colors.red('✗ Error:', e.message));
         }
-        console.log(colors.green(`Downloaded ${mediaCount} files`));
         break;
         
       case '2':
-        const to = await rl.questionAsync(colors.blue('Recipient: '));
-        const filePath = await rl.questionAsync(colors.blue('File path: '));
-        
-        const media = MessageMedia.fromFilePath(filePath);
-        await client.sendMessage(`${to}@c.us`, media);
-        console.log(colors.green('Media sent'));
+        try {
+          const to = await rl.questionAsync(colors.blue('Recipient (name/number): '));
+          const filepath = await rl.questionAsync(colors.blue('File path: '));
+          
+          const chat = await findContact(client, to);
+          const media = MessageMedia.fromFilePath(filepath);
+          await client.sendMessage(chat.id._serialized, media);
+          console.log(colors.green('✓ Media sent'));
+        } catch (e) {
+          console.log(colors.red('✗ Error sending media:', e.message));
+        }
         break;
         
       default:
-        console.log(colors.red('Invalid choice'));
+        console.log(colors.red('✗ Invalid choice'));
     }
   } catch (error) {
-    console.log(colors.red('Error:', error.message));
+    console.log(colors.red('✗ Error:', error.message));
   }
 };
