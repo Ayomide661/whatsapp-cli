@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { useMultiFileAuthState, makeWASocket, DisconnectReason } = require('@adiwajshing/baileys');
+const { useMultiFileAuthState, makeInMemoryStore, makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const readline = require('readline');
 const path = require('path');
@@ -24,10 +24,18 @@ const rl = readline.createInterface({
 // Main connection function
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('baileys_auth');
-
+    const { version } = await fetchLatestBaileysVersion();
+    
     const sock = makeWASocket({
+        version,
         printQRInTerminal: false,
-        auth: state
+        auth: state,
+        syncFullHistory: false,
+        generateHighQualityLinkPreview: true,
+        markOnlineOnConnect: true,
+        getMessage: async (key) => {
+            return null;
+        }
     });
 
     sock.ev.on('connection.update', (update) => {
