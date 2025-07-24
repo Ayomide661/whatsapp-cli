@@ -1,16 +1,18 @@
 #!/usr/bin/env node
-const { useMultiFileAuthState, makeInMemoryStore, makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { useMultiFileAuthState, makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const readline = require('readline');
 const path = require('path');
 const fs = require('fs');
 
-// Color setup
-const colors = {
+// Proper color functions
+const chalk = {
     green: text => `\x1b[32m${text}\x1b[0m`,
     red: text => `\x1b[31m${text}\x1b[0m`,
     yellow: text => `\x1b[33m${text}\x1b[0m`,
     cyan: text => `\x1b[36m${text}\x1b[0m`,
+    blue: text => `\x1b[34m${text}\x1b[0m`,
+    bold: text => `\x1b[1m${text}\x1b[0m`,
     prompt: '\x1b[34m>\x1b[0m '
 };
 
@@ -18,7 +20,7 @@ const colors = {
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: colors.prompt
+    prompt: chalk.prompt
 });
 
 // Main connection function
@@ -32,28 +34,25 @@ async function connectToWhatsApp() {
         auth: state,
         syncFullHistory: false,
         generateHighQualityLinkPreview: true,
-        markOnlineOnConnect: true,
-        getMessage: async (key) => {
-            return null;
-        }
+        markOnlineOnConnect: true
     });
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
         
         if (qr) {
-            console.log(colors.yellow('\nScan QR Code:'));
+            console.log(chalk.yellow('\nScan QR Code:'));
             qrcode.generate(qr, { small: true });
         }
 
         if (connection === 'open') {
-            console.log(colors.green('\n✓ Connected to WhatsApp'));
+            console.log(chalk.green('\n✓ Connected to WhatsApp'));
             showMainMenu(sock);
         }
 
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
-            console.log(colors.yellow(`\nConnection closed. ${shouldReconnect ? 'Reconnecting...' : 'Please restart the app.'}`));
+            console.log(chalk.yellow(`\nConnection closed. ${shouldReconnect ? 'Reconnecting...' : 'Please restart the app.'}`));
             if (shouldReconnect) {
                 connectToWhatsApp();
             }
@@ -67,8 +66,8 @@ async function connectToWhatsApp() {
 
 // Menu system
 function showMainMenu(sock) {
-    console.log(colors.cyan(`
-    ===== WhatsApp CLI (Baileys) =====
+    console.log(chalk.cyan(`
+    ===== ${chalk.bold('WhatsApp CLI (Baileys)')} =====
     1. Send Message
     2. Chat History
     3. Contacts
@@ -78,7 +77,7 @@ function showMainMenu(sock) {
     7. Backup Chats
     0. Exit
     `));
-    rl.question(colors.blue('Select option: '), (choice) => handleMenuChoice(choice, sock));
+    rl.question(chalk.blue('Select option: '), (choice) => handleMenuChoice(choice, sock));
 }
 
 async function handleMenuChoice(choice, sock) {
@@ -94,15 +93,15 @@ async function handleMenuChoice(choice, sock) {
 
     if (commands[choice.trim()]) {
         try {
-            await commands[choice.trim()](sock, rl);
+            await commands[choice.trim()](sock, rl, chalk);
         } catch (error) {
-            console.log(colors.red(`✗ Error: ${error.message}`));
+            console.log(chalk.red(`✗ Error: ${error.message}`));
         }
     } else if (choice.trim() === '0') {
-        console.log(colors.yellow('\nExiting...'));
+        console.log(chalk.yellow('\nExiting...'));
         process.exit(0);
     } else {
-        console.log(colors.red('Invalid choice'));
+        console.log(chalk.red('Invalid choice'));
     }
 
     showMainMenu(sock);
@@ -111,10 +110,10 @@ async function handleMenuChoice(choice, sock) {
 // Start the application
 (async () => {
     try {
-        console.log(colors.cyan('Starting WhatsApp CLI...'));
+        console.log(chalk.cyan('Starting WhatsApp CLI...'));
         await connectToWhatsApp();
     } catch (error) {
-        console.log(colors.red(`Fatal error: ${error.message}`));
+        console.log(chalk.red(`Fatal error: ${error.message}`));
         process.exit(1);
     }
 })();
