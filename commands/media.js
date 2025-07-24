@@ -45,7 +45,7 @@ async function downloadFromChat(client, rl) {
 
     console.log(colors.cyan(`\nFound ${mediaMessages.length} media items:`));
     mediaMessages.forEach((msg, i) => {
-      console.log(`${i + 1}. [${new Date(msg.timestamp * 1000).toLocaleString()}] ${msg.type}`);
+      console.log(`${i + 1}. [${new Date(msg.timestamp * 1000).toLocaleString()}] ${msg.type}${msg.type === 'document' ? ` (${msg.body})` : ''}`);
     });
 
     const selection = await rl.questionAsync(colors.blue('Which to download? (number/all): '));
@@ -69,30 +69,50 @@ async function downloadFromChat(client, rl) {
 
 async function downloadMedia(message) {
   try {
-    const media = await message.downloadMedia();
+    // Try downloading with retry for videos
+    let media = await message.downloadMedia();
+    if (!media && message.type === 'video') {
+      media = await new Promise(resolve => {
+        setTimeout(async () => {
+          try {
+            resolve(await message.downloadMedia());
+          } catch {
+            resolve(null);
+          }
+        }, 2000);
+      });
+    }
+
     if (!media) throw new Error('Media download failed');
 
-    // Determine file extension based on type
-    let extension;
+    // Detect file extension
+    let extension = 'dat';
     if (media.mimetype) {
       extension = media.mimetype.split('/')[1];
+    } else if (message.type === 'document') {
+      extension = message.body.split('.').pop() || 'bin';
     } else {
-      // Fallback extensions by message type
-      const typeMap = {
+      const typeExtensions = {
         'image': 'jpg',
         'video': 'mp4',
         'sticker': 'webp',
-        'document': 'bin',
-        'audio': 'ogg'
+        'audio': 'ogg',
+        'ptt': 'ogg' // voice messages
       };
-      extension = typeMap[message.type] || 'dat';
+      extension = typeExtensions[message.type] || 'dat';
     }
 
-    const filename = `media_${message.id.id}.${extension}`;
+    // Clean filename
+    const cleanId = message.id.id.replace(/\W/g, '');
+    const timestamp = new Date(message.timestamp * 1000).toISOString().replace(/[:.]/g, '-');
+    const filename = `media_${timestamp}_${cleanId}.${extension}`;
+
     fs.writeFileSync(filename, media.data, 'base64');
     console.log(colors.green(`✓ Saved ${filename} (${message.type})`));
+    return true;
   } catch (error) {
-    console.log(colors.yellow(`⚠ Could not download ${message.type} (${message.id.id}): ${error.message}`));
+    console.log(colors.yellow(`⚠ Could not download ${message.type}: ${error.message}`));
+    return false;
   }
 }
 
@@ -115,36 +135,32 @@ async function bulkDownload(client, rl) {
   try {
     const query = await rl.questionAsync(colors.blue('Contact/group name: '));
     const chat = await findContact(client, rl, query);
-    const outputDir = `media_${chat.id.user}_${Date.now()}`;
+    const outputDir = `media_${chat.name || chat.id.user}_${Date.now()}`.replace(/[^\w]/g, '_');
     
     fs.mkdirSync(outputDir, { recursive: true });
-    console.log(colors.yellow(`⏳ Scanning ${chat.name} for media...`));
+    console.log(colors.yellow(`⏳ Scanning ${chat.name || 'chat'} for media...`));
 
     let mediaCount = 0;
+    let messageCount = 0;
     let lastMessageId = null;
-    let batchCount = 0;
 
     while (true) {
-      const messages = await chat.fetchMessages({ limit: 20, before: lastMessageId });
+      const messages = await chat.fetchMessages({ limit: 50, before: lastMessageId });
       if (messages.length === 0) break;
 
       for (const msg of messages) {
+        messageCount++;
         if (msg.hasMedia) {
-          try {
-            await downloadMedia(msg, outputDir);
-            mediaCount++;
-          } catch (e) {
-            console.log(colors.yellow(`⚠ Skipped ${msg.id.id}`));
-          }
+          const success = await downloadMedia(msg, outputDir);
+          if (success) mediaCount++;
         }
       }
 
       lastMessageId = messages[messages.length - 1].id._serialized;
-      batchCount += messages.length;
-      process.stdout.write(`\rScanned ${batchCount} messages, found ${mediaCount} media files`);
+      process.stdout.write(`\rScanned ${messageCount} messages | Downloaded ${mediaCount} files`);
     }
 
-    console.log(colors.green(`\n✅ Downloaded ${mediaCount} files to ${outputDir}/`));
+    console.log(colors.green(`\n✅ Saved ${mediaCount} files to ${outputDir}/`));
   } catch (error) {
     console.log(colors.red(`✗ Error: ${error.message}`));
   }
