@@ -3,6 +3,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const readline = require('readline');
 const path = require('path');
+const sessionManager = require('./lib/sessionManager');
 
 // Color functions (fallback if chalk not available)
 const colors = {
@@ -55,11 +56,14 @@ const commands = {
 
 // Initialize client with proper LocalAuth
 const client = new Client({
-  authStrategy: new LocalAuth({ clientId: "cli-client" }),
-  puppeteer: { 
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  }
+    authStrategy: new LocalAuth({ 
+        clientId: "shared-session-client",
+        dataPath: path.join(__dirname, '.wwebjs_auth')
+    }),
+    puppeteer: { 
+        headless: true,
+        args: ['--no-sandbox']
+    }
 });
 
 // Client Events
@@ -68,8 +72,8 @@ client.on('qr', qr => {
   qrcode.generate(qr, { small: true });
 });
 
-client.on('authenticated', () => {
-  console.log(colors.green('\n✓ Authenticated'));
+client.on('authenticated', async (session) => {
+    await sessionManager.getWWebJSSession(client);
 });
 
 client.on('ready', () => {
